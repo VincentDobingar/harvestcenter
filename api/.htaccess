@@ -1,0 +1,8 @@
+PassengerEnabled on
+PassengerAppEnv production
+PassengerAppRoot "/home2/sc2djem5820/harvestcentertd.org/api"
+PassengerAppType node
+PassengerStartupFile index.cjs
+PassengerBaseURI "/api"
+PassengerNodejs "/home2/sc2djem5820/nodevenv/harvestcentertd.org/api/18/bin/node"
+SetEnv API_BASE ""

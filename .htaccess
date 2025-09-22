@@ -1,0 +1,109 @@
+###############################################
+# Harvest Center – public_html/.htaccess
+# Apache 2.4+ (o2switch/cPanel)
+###############################################
+
+# --- Sécurité de base ---
+# Pas de listing de répertoires
+Options -Indexes
+
+# Fichier par défaut
+DirectoryIndex index.html
+
+# Types utiles
+AddType application/wasm .wasm
+
+# --- Forcer HTTPS + WWW (domaine canonique) ---
+RewriteEngine On
+
+# Si pas en HTTPS OU si domaine sans www -> redirige vers https://www.harvestcentertd.org
+RewriteCond %{HTTPS} !=on [OR]
+RewriteCond %{HTTP_HOST} ^harvestcentertd\.org$ [NC]
+RewriteRule ^ https://www.harvestcentertd.org%{REQUEST_URI} [R=301,L]
+
+# (Optionnel si derrière proxy/CDN)
+RewriteCond %{HTTPS} =on [OR]
+RewriteCond %{HTTP:X-Forwarded-Proto} =https
+RewriteRule ^ - [S=1]
+
+# --- En-têtes de sécurité (HSTS, XSS, MIME) ---
+<IfModule mod_headers.c>
+  # HSTS 6 mois (active seulement si vous êtes certain d’être en HTTPS partout)
+  Header always set Strict-Transport-Security "max-age=15552000; includeSubDomains; preload"
+
+  # Protège contre le sniffing de type MIME
+  Header always set X-Content-Type-Options "nosniff"
+
+  # Petite barrière contre le XSS (legacy)
+  Header always set X-XSS-Protection "1; mode=block"
+
+  # Politique referer moins bavarde
+  Header always set Referrer-Policy "strict-origin-when-cross-origin"
+
+  # CSP très permissive pour éviter de casser des scripts inline.
+  # Durcissez-la si vous contrôlez toutes les sources.
+  Header always set Content-Security-Policy "default-src 'self' 'unsafe-inline' 'unsafe-eval' data: https:;"
+</IfModule>
+
+# --- Compression (gzip/brotli si dispo) ---
+<IfModule mod_deflate.c>
+  AddOutputFilterByType DEFLATE \
+    text/plain text/html text/xml text/css text/javascript application/javascript \
+    application/json application/xml application/rss+xml application/atom+xml \
+    image/svg+xml
+</IfModule>
+
+# --- Caching des assets (Vite génère des fichiers hashés immutables) ---
+<IfModule mod_expires.c>
+  ExpiresActive On
+
+  # Assets fingerprintés (js/css/polices/images) -> 1 an + immutable
+  <FilesMatch "\.(?:js|mjs|css|woff2?|ttf|eot|png|jpg|jpeg|gif|svg)$">
+    ExpiresDefault "access plus 1 year"
+  </FilesMatch>
+
+  # HTML -> courte durée + revalidation
+  <FilesMatch "\.(?:html)$">
+    ExpiresDefault "access plus 1 hour"
+  </FilesMatch>
+</IfModule>
+
+<IfModule mod_headers.c>
+  # Cache-Control complémentaire
+  <FilesMatch "\.(?:js|mjs|css|woff2?|ttf|eot|png|jpg|jpeg|gif|svg)$">
+    Header always set Cache-Control "public, max-age=31536000, immutable"
+  </FilesMatch>
+  <FilesMatch "\.(?:html)$">
+    Header always set Cache-Control "no-cache, must-revalidate"
+  </FilesMatch>
+</IfModule>
+
+# --- (Optionnel) Préflight CORS sur /api si Apache sert la réponse ---
+# Si votre front appelle /api en cross-origin ET que la requête OPTIONS arrive jusqu'à Apache,
+# on peut renvoyer rapidement une 204 avec les bons headers. Inutile en "same-origin".
+<IfModule mod_headers.c>
+  <If "%{REQUEST_METHOD} == 'OPTIONS' && %{REQUEST_URI} =~ m#^/api/#">
+    Header always set Access-Control-Allow-Origin "https://www.harvestcentertd.org"
+    Header always set Access-Control-Allow-Methods "GET,POST,PUT,PATCH,DELETE,OPTIONS"
+    Header always set Access-Control-Allow-Headers "Content-Type, Authorization"
+    Header always set Vary "Origin"
+    Require all granted
+  </If>
+</IfModule>
+RewriteCond %{REQUEST_METHOD} =OPTIONS
+RewriteRule ^api/ - [R=204,L]
+
+# --- SPA fallback (React/Vite) ---
+# Toute requête qui n'est pas un fichier/répertoire existant
+# et qui n'est pas sous /api, /uploads, /assets, /favicon, etc. -> index.html
+RewriteCond %{REQUEST_FILENAME} !-f
+RewriteCond %{REQUEST_FILENAME} !-d
+RewriteCond %{REQUEST_URI} !^/api/        [NC]
+RewriteCond %{REQUEST_URI} !^/uploads/    [NC]
+RewriteCond %{REQUEST_URI} !^/assets/     [NC]
+RewriteCond %{REQUEST_URI} !^/favicon     [NC]
+RewriteRule . /index.html [L]
+
+###############################################
+# Fin du fichier
+###############################################
